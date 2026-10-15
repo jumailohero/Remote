@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.66"
+        android:scaleY="0.66"
+        android:translateX="18.36"
+        android:translateY="18.36">
+        <!-- Remote Body Outline -->
+        <path
+            android:fillColor="#1E293B"
+            android:strokeColor="#38BDF8"
+            android:strokeWidth="3"
+            android:pathData="M34,16 L74,16 A10,10 0 0,1 84,26 L84,86 A12,12 0 0,1 72,98 L36,98 A12,12 0 0,1 24,86 L24,26 A10,10 0 0,1 34,16 Z" />
+        
+        <!-- IR Blaster LED Top Dome -->
+        <path
+            android:fillColor="#EF4444"
+            android:pathData="M48,16 L60,16 A6,6 0 0,0 48,16 Z" />
+        
+        <!-- IR Beams / Waves from top -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#EF4444"
+            android:strokeWidth="2.5"
+            android:strokeLineCap="round"
+            android:pathData="M44,10 A12,12 0 0,1 64,10" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#F87171"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:pathData="M38,5 A20,20 0 0,1 70,5" />
+
+        <!-- Power Button -->
+        <path
+            android:fillColor="#EF4444"
+            android:pathData="M54,28m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+
+        <!-- Navigation / Volume D-Pad Ring -->
+        <path
+            android:fillColor="#0F172A"
+            android:strokeColor="#38BDF8"
+            android:strokeWidth="2"
+            android:pathData="M54,54m-16,0a16,16 0,1 1,32 0a16,16 0,1 1,-32 0" />
+        <!-- OK / Play Center button -->
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M54,54m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0" />
+        <!-- D-Pad pointers -->
+        <path
+            android:fillColor="#93C5FD"
+            android:pathData="M54,41 L57,45 L51,45 Z" />
+        <path
+            android:fillColor="#93C5FD"
+            android:pathData="M54,67 L57,63 L51,63 Z" />
+        <path
+            android:fillColor="#93C5FD"
+            android:pathData="M41,54 L45,51 L45,57 Z" />
+        <path
+            android:fillColor="#93C5FD"
+            android:pathData="M67,54 L63,51 L63,57 Z" />
+
+        <!-- Source / EQ / Bass pill buttons -->
+        <path
+            android:fillColor="#334155"
+            android:pathData="M32,74 L46,74 A3,3 0 0,1 49,77 L49,79 A3,3 0 0,1 46,82 L32,82 A3,3 0 0,1 29,79 L29,77 A3,3 0 0,1 32,74 Z" />
+        <path
+            android:fillColor="#334155"
+            android:pathData="M62,74 L76,74 A3,3 0 0,1 79,77 L79,79 A3,3 0 0,1 76,82 L62,82 A3,3 0 0,1 59,79 L59,77 A3,3 0 0,1 62,74 Z" />
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M44,86 L64,86 A3,3 0 0,1 67,89 L67,90 A3,3 0 0,1 64,93 L44,93 A3,3 0 0,1 41,90 L41,89 A3,3 0 0,1 44,86 Z" />
+    </group>
+</vector>

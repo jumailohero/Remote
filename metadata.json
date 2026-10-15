@@ -1,0 +1,6 @@
+{
+  "name": "Philips MMS Remote",
+  "description": "Smart remote control app for Philips MMS2625B/94 2.1 Home Theatre Speaker Amplifier with NEC 38kHz IR protocol, Bluetooth audio sync, EQ presets and custom layouts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
