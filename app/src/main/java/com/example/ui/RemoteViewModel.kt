@@ -9,6 +9,7 @@ import com.example.ir.IrTransmitter
 import com.example.ir.TransmissionResult
 import com.example.model.EqPreset
 import com.example.model.RemoteCommand
+import com.example.model.RemoteProfile
 import com.example.model.SpeakerSource
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -25,21 +26,22 @@ enum class RemoteLayoutType(val label: String, val iconName: String) {
 }
 
 enum class ControlMode(val label: String, val description: String) {
-    HYBRID("Hybrid IR + Bluetooth", "Blasts 38kHz IR & syncs smartphone volume"),
-    IR_ONLY("Infrared Only", "Pure 38kHz NEC IR blaster pulses"),
+    HYBRID("Hybrid IR + Bluetooth", "Blasts IR pulses & syncs smartphone volume"),
+    IR_ONLY("Infrared Only", "Pure IR blaster pulses"),
     BLUETOOTH_ONLY("Bluetooth Only", "Controls phone audio & connected BT speaker")
 }
 
 data class RemoteUiState(
     val isPoweredOn: Boolean = true,
     val currentSource: SpeakerSource = SpeakerSource.BLUETOOTH,
-    val volumeLevel: Int = 18, // 0 to 30
+    val volumeLevel: Int = 18,
     val maxVolume: Int = 30,
     val isMuted: Boolean = false,
-    val bassLevel: Int = 2, // -6 to +6
+    val bassLevel: Int = 2,
     val currentEq: EqPreset = EqPreset.ROCK,
-    val fmFrequency: Float = 98.3f, // 87.5 - 108.0 MHz
-    val deviceAddress: Int = 0x00, // 0x00 standard for MMS2625B
+    val fmFrequency: Float = 98.3f,
+    val activeProfile: RemoteProfile = RemoteProfile.ALL_PROFILES[0],
+    val repeatCount: Int = 2, // 2 frames sent back-to-back for high reliability
     val hasHardwareIr: Boolean = false,
     val isBluetoothConnected: Boolean = false,
     val controlMode: ControlMode = ControlMode.HYBRID,
@@ -48,7 +50,9 @@ data class RemoteUiState(
     val lastTransmission: TransmissionResult? = null,
     val isTransmittingAnim: Boolean = false,
     val recentHistory: List<TransmissionResult> = emptyList(),
-    val isScanningFm: Boolean = false
+    val isScanningFm: Boolean = false,
+    val isAutoSyncRunning: Boolean = false,
+    val autoSyncProfileIndex: Int = 0
 )
 
 class RemoteViewModel(application: Application) : AndroidViewModel(application) {
@@ -66,6 +70,7 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
 
     private var transmitAnimJob: Job? = null
     private var fmScanJob: Job? = null
+    private var autoSyncJob: Job? = null
 
     init {
         refreshBluetoothStatus()
@@ -83,8 +88,14 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(controlMode = mode) }
     }
 
-    fun setDeviceAddress(address: Int) {
-        _uiState.update { it.copy(deviceAddress = address) }
+    fun setProfile(profile: RemoteProfile) {
+        _uiState.update { it.copy(activeProfile = profile) }
+        // Send a quick test burst on profile switch
+        sendCommand(RemoteCommand.SOURCE_CYCLE)
+    }
+
+    fun setRepeatCount(repeats: Int) {
+        _uiState.update { it.copy(repeatCount = repeats.coerceIn(1, 4)) }
     }
 
     fun toggleHaptic() {
@@ -97,20 +108,18 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
     fun sendCommand(command: RemoteCommand) {
         val currentState = _uiState.value
 
-        // 1. Transmit IR if mode includes IR
         var transResult: TransmissionResult? = null
         if (currentState.controlMode != ControlMode.BLUETOOTH_ONLY) {
             transResult = irTransmitter.transmit(
                 command = command,
-                address = currentState.deviceAddress,
+                profile = currentState.activeProfile,
+                customRepeats = currentState.repeatCount,
                 haptic = currentState.hapticEnabled
             )
         } else if (currentState.hapticEnabled) {
-            // Still trigger haptic feedback in BT-only mode
-            irTransmitter.transmit(command, currentState.deviceAddress, haptic = true)
+            irTransmitter.transmit(command, currentState.activeProfile, customRepeats = 1, haptic = true)
         }
 
-        // 2. Perform Bluetooth/Smartphone audio sync if hybrid or BT mode
         if (currentState.controlMode != ControlMode.IR_ONLY) {
             when (command) {
                 RemoteCommand.VOL_UP -> btController.stepVolumeUp()
@@ -120,11 +129,10 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
                 RemoteCommand.PREVIOUS -> btController.sendMediaKeyEvent(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
                 RemoteCommand.REWIND_TUNE_DOWN -> btController.sendMediaKeyEvent(KeyEvent.KEYCODE_MEDIA_REWIND)
                 RemoteCommand.FORWARD_TUNE_UP -> btController.sendMediaKeyEvent(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD)
-                else -> { /* Other commands are speaker-hardware specific */ }
+                else -> {}
             }
         }
 
-        // 3. Update local simulation state to match the remote action
         _uiState.update { state ->
             val updated = when (command) {
                 RemoteCommand.POWER -> state.copy(isPoweredOn = !state.isPoweredOn)
@@ -194,7 +202,6 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
 
-        // Trigger visual LED flash animation
         flashTransmitIndicator()
     }
 
@@ -237,6 +244,30 @@ class RemoteViewModel(application: Application) : AndroidViewModel(application) 
             }
             _uiState.update { it.copy(isScanningFm = false) }
         }
+    }
+
+    /**
+     * Auto Code Search / Quick Scanner:
+     * Cycles through each profile and blasts Power or Source every 1.5 seconds so user can see which one responds.
+     */
+    fun startAutoSync(testCommand: RemoteCommand = RemoteCommand.SOURCE_CYCLE) {
+        autoSyncJob?.cancel()
+        _uiState.update { it.copy(isAutoSyncRunning = true) }
+
+        autoSyncJob = viewModelScope.launch {
+            val profiles = RemoteProfile.ALL_PROFILES
+            for (i in profiles.indices) {
+                _uiState.update { it.copy(activeProfile = profiles[i], autoSyncProfileIndex = i) }
+                sendCommand(testCommand)
+                delay(1600)
+            }
+            _uiState.update { it.copy(isAutoSyncRunning = false) }
+        }
+    }
+
+    fun stopAutoSync() {
+        autoSyncJob?.cancel()
+        _uiState.update { it.copy(isAutoSyncRunning = false) }
     }
 
     fun applyPartyBassPreset() {

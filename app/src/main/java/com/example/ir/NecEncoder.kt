@@ -3,12 +3,13 @@ package com.example.ir
 /**
  * High-performance NEC Infrared Protocol Encoder for Philips MMS2625B/94 Multimedia Speaker System.
  *
- * Implements 38 kHz carrier frequency pulse-distance modulation:
+ * Implements 38 kHz carrier frequency pulse-distance modulation with proper lead-out gap and frame repetition:
  * - Preamble / Leader: 9000 µs Mark + 4500 µs Space
- * - Bit 0: 560 µs Mark + 560 µs Space (Total 1120 µs)
- * - Bit 1: 560 µs Mark + 1690 µs Space (Total 2250 µs)
+ * - Bit 0: 560 µs Mark + 560 µs Space
+ * - Bit 1: 560 µs Mark + 1690 µs Space
  * - Stop bit: 560 µs Mark
- * - 32-bit Frame: [Addr 8-bit] + [~Addr 8-bit] + [Cmd 8-bit] + [~Cmd 8-bit] (LSB first)
+ * - Trailing Gap / Lead-out: 40000 µs Space
+ * - Frame Repeat: Transmits 2 full frames back-to-back so AGC bandpass filters lock on reliably.
  */
 object NecEncoder {
 
@@ -20,22 +21,23 @@ object NecEncoder {
     private const val ZERO_SPACE = 560
     private const val ONE_SPACE = 1690
     private const val STOP_MARK = 560
+    private const val LEAD_OUT_GAP = 40000 // 40 ms lead-out gap
 
     /**
-     * Builds a 67-element microsecond timing pattern suitable for [android.hardware.ConsumerIrManager.transmit].
+     * Builds microsecond timing pattern suitable for [android.hardware.ConsumerIrManager.transmit].
+     * Includes trailing space and repeats frames so hardware receivers register the signal.
      *
-     * @param address 8-bit device address (Default Philips MMS2625B: 0x00)
-     * @param command 8-bit opcode command (e.g. 0x12 for Power)
-     * @return int[] array of alternating mark and space microsecond intervals
+     * @param address 8-bit device address (Default: 0x00)
+     * @param command 8-bit opcode command
+     * @param repeats Number of full frames to transmit (default 2 for high reliability)
+     * @return int[] array of alternating mark and space microsecond intervals (even length)
      */
-    fun buildPattern(address: Int, command: Int): IntArray {
-        val pattern = IntArray(67)
+    fun buildPattern(address: Int, command: Int, repeats: Int = 2): IntArray {
+        // Single frame consists of: Leader (2) + 32 bits (64) + Stop (1) + Gap (1) = 68 intervals
+        val singleFrame = IntArray(68)
+        singleFrame[0] = LEADER_MARK
+        singleFrame[1] = LEADER_SPACE
 
-        // 1. Leader code
-        pattern[0] = LEADER_MARK
-        pattern[1] = LEADER_SPACE
-
-        // 2. 32-bit Frame payload: Addr + ~Addr + Cmd + ~Cmd
         val addr = address and 0xFF
         val invAddr = (addr.inv()) and 0xFF
         val cmd = command and 0xFF
@@ -48,19 +50,31 @@ object NecEncoder {
 
         var index = 2
         for (i in 0 until 32) {
-            pattern[index++] = BIT_MARK
+            singleFrame[index++] = BIT_MARK
             val isBitOne = ((frame shr i) and 1L) == 1L
-            pattern[index++] = if (isBitOne) ONE_SPACE else ZERO_SPACE
+            singleFrame[index++] = if (isBitOne) ONE_SPACE else ZERO_SPACE
         }
 
-        // 3. Stop bit
-        pattern[66] = STOP_MARK
+        // Stop bit mark and trailing lead-out gap
+        singleFrame[66] = STOP_MARK
+        singleFrame[67] = LEAD_OUT_GAP
 
-        return pattern
+        val safeRepeats = repeats.coerceIn(1, 4)
+        if (safeRepeats == 1) {
+            return singleFrame
+        }
+
+        // Concatenate multiple frames back-to-back
+        val fullPattern = IntArray(68 * safeRepeats)
+        for (r in 0 until safeRepeats) {
+            System.arraycopy(singleFrame, 0, fullPattern, r * 68, 68)
+        }
+
+        return fullPattern
     }
 
     /**
-     * Generates the standard 32-bit NEC Hex representation string (e.g. "0x00FF12ED").
+     * Generates 32-bit NEC Hex representation string (e.g. "0x00FF12ED").
      */
     fun to32BitHexWord(address: Int, command: Int): String {
         val addr = address and 0xFF
@@ -76,12 +90,11 @@ object NecEncoder {
      * Converts the NEC pulse pattern to standard Pronto Hex string (38 kHz).
      */
     fun toProntoHex(address: Int, command: Int): String {
-        val pattern = buildPattern(address, command)
-        // 38 kHz pronto frequency multiplier: 1000000 / (38000 * 0.241246) approx 0x006D
+        val pattern = buildPattern(address, command, repeats = 1)
         val timeBase = 1000000.0 / CARRIER_FREQ
 
         val sb = StringBuilder()
-        sb.append("0000 006d 0022 0000 ") // Pronto preamble: raw, 38kHz, burst pair count 34
+        sb.append("0000 006d 0022 0000 ")
 
         for (i in 0 until pattern.size step 2) {
             val markCycles = Math.round(pattern[i] / timeBase).toInt()

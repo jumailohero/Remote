@@ -5,12 +5,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,30 +22,28 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -56,21 +56,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.model.RemoteCommand
-import com.example.ui.ControlMode
+import com.example.model.RemoteProfile
 import com.example.ui.RemoteLayoutType
 import com.example.ui.RemoteViewModel
 import com.example.ui.screens.ClassicRemoteLayout
 import com.example.ui.screens.ConsoleRemoteLayout
 import com.example.ui.screens.QuickRemoteLayout
 import com.example.ui.screens.SignalInspectorDialog
+import com.example.ui.theme.AmberLed
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.ElectricAccent
 import com.example.ui.theme.MyApplicationTheme
@@ -155,7 +154,7 @@ fun MainScreen(viewModel: RemoteViewModel) {
                                 }
                             }
                             Text(
-                                text = "NEC 38kHz • ${uiState.controlMode.label}",
+                                text = "${uiState.activeProfile.name} • ${uiState.repeatCount}x Burst",
                                 color = Color(0xFF94A3B8),
                                 fontSize = 10.sp
                             )
@@ -163,7 +162,6 @@ fun MainScreen(viewModel: RemoteViewModel) {
                     }
                 },
                 actions = {
-                    // Protocol inspector & Settings button
                     IconButton(
                         onClick = { showInspectorDialog = true },
                         modifier = Modifier.testTag("btn_open_inspector")
@@ -188,16 +186,72 @@ fun MainScreen(viewModel: RemoteViewModel) {
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Quick Profile Switcher Horizontal Strip
+            ProfileSwitcherBar(
+                activeProfile = uiState.activeProfile,
+                onSelectProfile = { viewModel.setProfile(it) },
+                onStartAutoSync = { viewModel.startAutoSync() },
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 4.dp)
+            )
+
+            // Auto-Sync Scanner Active Alert Banner
+            AnimatedVisibility(visible = uiState.isAutoSyncRunning) {
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 600.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF261905))
+                        .border(1.2.dp, AmberLed, RoundedCornerShape(12.dp))
+                        .padding(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Auto-Testing: ${uiState.activeProfile.name}",
+                                color = AmberLed,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Did your amplifier beep or change? Tap LOCK to save!",
+                                color = Color(0xFFFEF3C7),
+                                fontSize = 10.sp
+                            )
+                        }
+                        Row {
+                            ElevatedButton(
+                                onClick = { viewModel.stopAutoSync() },
+                                colors = ButtonDefaults.elevatedButtonColors(containerColor = SuccessGreen),
+                                modifier = Modifier.height(34.dp)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("LOCK", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Layout Selector Segment (Classic Remote / Sound Console / Big Buttons)
             LayoutSelectorTabs(
                 selectedLayout = uiState.activeLayout,
                 onSelectLayout = { viewModel.setLayout(it) },
                 modifier = Modifier
                     .widthIn(max = 600.dp)
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
             )
 
-            // Content container (centered for tablets / foldables)
+            // Content container
             Box(
                 modifier = Modifier
                     .widthIn(max = 600.dp)
@@ -242,11 +296,77 @@ fun MainScreen(viewModel: RemoteViewModel) {
             SignalInspectorDialog(
                 state = uiState,
                 onDismiss = { showInspectorDialog = false },
-                onSetDeviceAddress = { viewModel.setDeviceAddress(it) },
+                onSelectProfile = { viewModel.setProfile(it) },
+                onSetRepeatCount = { viewModel.setRepeatCount(it) },
                 onSetControlMode = { viewModel.setControlMode(it) },
                 onToggleHaptic = { viewModel.toggleHaptic() },
+                onStartAutoSync = { viewModel.startAutoSync() },
+                onStopAutoSync = { viewModel.stopAutoSync() },
                 onTestCommand = { viewModel.sendCommand(it) }
             )
+        }
+    }
+}
+
+@Composable
+fun ProfileSwitcherBar(
+    activeProfile: RemoteProfile,
+    onSelectProfile: (RemoteProfile) -> Unit,
+    onStartAutoSync: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Auto Sync Quick Button
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF3B2A10))
+                .border(1.dp, AmberLed, RoundedCornerShape(8.dp))
+                .clickable { onStartAutoSync() }
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AutoMode, contentDescription = null, tint = AmberLed, modifier = Modifier.size(13.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Auto-Sync ⚡", color = AmberLed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        for (profile in RemoteProfile.ALL_PROFILES) {
+            val isSelected = activeProfile.id == profile.id
+            val shortLabel = when (profile.id) {
+                "mms_default" -> "P1: NEC 0x00"
+                "mms_abs8776" -> "P2: ABS-8776"
+                "mms_alt_7f" -> "P3: Addr 0x7F"
+                "mms_alt_ff" -> "P4: Addr 0xFF"
+                "mms_alt_01" -> "P5: Addr 0x01"
+                "philips_rc6" -> "P6: RC-6 (36k)"
+                "philips_rc5" -> "P7: RC-5 (36k)"
+                else -> profile.name
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isSelected) PhilipsCyan else Color(0xFF161C27))
+                    .border(1.dp, if (isSelected) PhilipsCyan else Color(0xFF28344A), RoundedCornerShape(8.dp))
+                    .clickable { onSelectProfile(profile) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .testTag("chip_${profile.id}")
+            ) {
+                Text(
+                    text = shortLabel,
+                    color = if (isSelected) Color.Black else Color(0xFF94A3B8),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }

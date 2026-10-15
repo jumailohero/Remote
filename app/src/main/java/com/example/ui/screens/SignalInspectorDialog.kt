@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,16 +19,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -46,9 +53,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.RemoteCommand
+import com.example.model.RemoteProfile
 import com.example.ui.ControlMode
 import com.example.ui.RemoteUiState
-import com.example.ui.components.RemotePhysicalButton
 import com.example.ui.theme.AmberLed
 import com.example.ui.theme.ElectricAccent
 import com.example.ui.theme.PhilipsCyan
@@ -59,9 +66,12 @@ import com.example.ui.theme.SuccessGreen
 fun SignalInspectorDialog(
     state: RemoteUiState,
     onDismiss: () -> Unit,
-    onSetDeviceAddress: (Int) -> Unit,
+    onSelectProfile: (RemoteProfile) -> Unit,
+    onSetRepeatCount: (Int) -> Unit,
     onSetControlMode: (ControlMode) -> Unit,
     onToggleHaptic: () -> Unit,
+    onStartAutoSync: () -> Unit,
+    onStopAutoSync: () -> Unit,
     onTestCommand: (RemoteCommand) -> Unit
 ) {
     val context = LocalContext.current
@@ -79,7 +89,7 @@ fun SignalInspectorDialog(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "IR Protocol & Settings",
+                    text = "Speaker IR Profiles & Sync",
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -111,16 +121,16 @@ fun SignalInspectorDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = if (state.hasHardwareIr) "Hardware IR Blaster Active" else "IR Simulation Mode Active",
+                                text = if (state.hasHardwareIr) "Redmi IR Blaster Hardware Active" else "IR Simulation Mode",
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
                                 text = if (state.hasHardwareIr)
-                                    "Ready to transmit 38 kHz NEC pulses to Philips MMS2625B"
+                                    "Physical 38 kHz / 36 kHz optical emitter active. Aim top of phone at speaker."
                                 else
-                                    "This phone has no built-in IR blaster. Simulated IR visualizer & Bluetooth speaker volume are active.",
+                                    "No IR hardware detected. Virtual signals enabled.",
                                 color = Color(0xFFCBD5E1),
                                 fontSize = 11.sp
                             )
@@ -130,9 +140,92 @@ fun SignalInspectorDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Control Mode Switcher
+                // Auto Code Search / Scanner Box
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1B2433))
+                        .border(1.dp, PhilipsCyan, RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoMode,
+                                    contentDescription = null,
+                                    tint = PhilipsCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Auto Code Search (Quick Fix)",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Cycles through all Philips MMS profiles every 1.5s. Point your phone at the speaker until it responds!",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 11.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (state.isAutoSyncRunning) {
+                            LinearProgressIndicator(
+                                progress = { (state.autoSyncProfileIndex + 1f) / RemoteProfile.ALL_PROFILES.size },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = PhilipsCyan,
+                                trackColor = Color(0xFF28344A)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Testing: ${state.activeProfile.name}...",
+                                color = AmberLed,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            FilledTonalButton(
+                                onClick = onStopAutoSync,
+                                colors = ButtonDefaults.filledTonalButtonColors(containerColor = PowerRed),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(imageVector = Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = "STOP SCANNER", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            FilledTonalButton(
+                                onClick = onStartAutoSync,
+                                colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF007AD9)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(text = "START AUTO CODE SEARCH", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Select Device Profile (7 options)
                 Text(
-                    text = "Control Integration Mode",
+                    text = "Select Remote Profile",
                     color = PhilipsCyan,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -140,8 +233,8 @@ fun SignalInspectorDialog(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                for (mode in ControlMode.entries) {
-                    val isSelected = state.controlMode == mode
+                for (profile in RemoteProfile.ALL_PROFILES) {
+                    val isSelected = state.activeProfile.id == profile.id
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -149,21 +242,29 @@ fun SignalInspectorDialog(
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isSelected) Color(0xFF1E3A5F) else Color(0xFF181E2B))
                             .border(1.dp, if (isSelected) PhilipsCyan else Color(0xFF28344A), RoundedCornerShape(10.dp))
-                            .clickable { onSetControlMode(mode) }
+                            .clickable { onSelectProfile(profile) }
                             .padding(horizontal = 12.dp, vertical = 8.dp)
-                            .testTag("mode_${mode.name}")
+                            .testTag("profile_${profile.id}")
                     ) {
                         Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = profile.name,
+                                    color = if (isSelected) Color.White else Color(0xFFCBD5E1),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (isSelected) {
+                                    Text(text = "ACTIVE", color = SuccessGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                             Text(
-                                text = mode.label,
-                                color = if (isSelected) Color.White else Color(0xFFCBD5E1),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = mode.description,
+                                text = profile.description,
                                 color = Color(0xFF94A3B8),
-                                fontSize = 11.sp
+                                fontSize = 10.sp
                             )
                         }
                     }
@@ -171,53 +272,33 @@ fun SignalInspectorDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Device Address Tuning (for motherboard hardware revisions)
+                // Signal Burst Repetition (Crucial for physical amplifiers)
                 Text(
-                    text = "NEC Device Address (Philips MMS2625B)",
+                    text = "Signal Repeat Count: ${state.repeatCount}x",
                     color = PhilipsCyan,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = "Default is 0x00. If your unit's ODM motherboard varies, switch to alternate address:",
+                    text = "Repeats the IR burst so the receiver's AGC filter doesn't ignore it (default 2x).",
                     color = Color(0xFF94A3B8),
                     fontSize = 11.sp
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Slider(
+                    value = state.repeatCount.toFloat(),
+                    onValueChange = { onSetRepeatCount(it.toInt()) },
+                    valueRange = 1f..4f,
+                    steps = 2,
+                    colors = SliderDefaults.colors(
+                        thumbColor = PhilipsCyan,
+                        activeTrackColor = PhilipsCyan,
+                        inactiveTrackColor = Color(0xFF28344A)
+                    ),
+                    modifier = Modifier.testTag("slider_repeats")
+                )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val addresses = listOf(
-                        0x00 to "0x00 (Default)",
-                        0x01 to "0x01 (Alt 1)",
-                        0x7F to "0x7F (Alt 2)"
-                    )
-                    for ((addr, label) in addresses) {
-                        val isCurrent = state.deviceAddress == addr
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isCurrent) PhilipsCyan else Color(0xFF181E2B))
-                                .border(1.dp, if (isCurrent) PhilipsCyan else Color(0xFF28344A), RoundedCornerShape(8.dp))
-                                .clickable { onSetDeviceAddress(addr) }
-                                .padding(vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = label,
-                                color = if (isCurrent) Color.Black else Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Haptic Feedback Toggle
                 Row(
@@ -231,34 +312,14 @@ fun SignalInspectorDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Vibration,
-                            contentDescription = null,
-                            tint = ElectricAccent,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Icon(imageVector = Icons.Default.Vibration, contentDescription = null, tint = ElectricAccent, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Tactile Haptic Click",
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Vibration feel on remote buttons",
-                                color = Color(0xFF94A3B8),
-                                fontSize = 11.sp
-                            )
-                        }
+                        Text(text = "Tactile Vibration", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                     Switch(
                         checked = state.hapticEnabled,
                         onCheckedChange = { onToggleHaptic() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = PhilipsCyan,
-                            checkedTrackColor = Color(0xFF1E3A5F)
-                        ),
+                        colors = SwitchDefaults.colors(checkedThumbColor = PhilipsCyan, checkedTrackColor = Color(0xFF1E3A5F)),
                         modifier = Modifier.testTag("switch_haptic")
                     )
                 }
@@ -268,7 +329,7 @@ fun SignalInspectorDialog(
                     val last = state.lastTransmission
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        text = "Last Transmitted Signal Telemetry",
+                        text = "Last Signal Dispatched",
                         color = PhilipsCyan,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -285,54 +346,26 @@ fun SignalInspectorDialog(
                             .padding(10.dp)
                     ) {
                         Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = "Command: ${last.command.title}",
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "38,000 Hz",
-                                    color = ElectricAccent,
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(text = "${last.command.title} (${last.profileName})", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(text = "${last.carrierFreq} Hz (${last.pulseCount} pulses)", color = ElectricAccent, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                             }
-                            Text(
-                                text = "Opcode: 0x%02X | 32-bit Word: ${last.hexWord}".format(last.opcode),
-                                color = AmberLed,
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace
-                            )
+                            Text(text = "Code: ${last.hexWord}", color = AmberLed, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Pronto Hex: ${last.prontoHex.take(28)}...",
-                                    color = Color(0xFF94A3B8),
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
+                                Text(text = last.prontoHex.take(28) + "...", color = Color(0xFF94A3B8), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                                 IconButton(
                                     onClick = {
                                         clipboardManager.setText(AnnotatedString(last.prontoHex))
-                                        Toast.makeText(context, "Pronto Hex copied!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Hex copied!", Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.size(24.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Copy Pronto Hex",
-                                        tint = PhilipsCyan,
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                    Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy", tint = PhilipsCyan, modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
@@ -342,7 +375,7 @@ fun SignalInspectorDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.testTag("dialog_close_btn")) {
-                Text(text = "Close", color = PhilipsCyan, fontWeight = FontWeight.Bold)
+                Text(text = "Done", color = PhilipsCyan, fontWeight = FontWeight.Bold)
             }
         },
         containerColor = Color(0xFF131824),
